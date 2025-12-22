@@ -4,6 +4,7 @@ import { X, Trash2, Calendar, Type, Tag, AlignLeft } from 'lucide-react';
 import { CalendarEvent, CategoryConfig, Language } from '../types';
 import { format, parseISO } from 'date-fns';
 import { TRANSLATIONS } from '../constants';
+import { generateId } from '../utils/id';
 
 interface EventModalProps {
   isOpen: boolean;
@@ -45,7 +46,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onDele
     if (!formData.title || !formData.startDate || !formData.endDate || !formData.categoryId) return;
     
     onSave({
-      id: formData.id || Math.random().toString(36).substr(2, 9),
+      id: formData.id || generateId(),
       title: formData.title!,
       categoryId: formData.categoryId!,
       startDate: new Date(formData.startDate).toISOString(),
@@ -61,27 +62,37 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onDele
     if (formData.endDate && newStart > formData.endDate) {
       updates.endDate = newStart;
     }
-    setFormData({ ...formData, ...updates });
+    setFormData(prev => ({ ...prev, ...updates }));
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+    <div 
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2">
+          <h3 id="modal-title" className="font-bold text-slate-800 flex items-center gap-2">
             {formData.id ? t.modalEdit : t.modalAdd}
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+          <button 
+            onClick={onClose} 
+            aria-label={t.modalCancel}
+            className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+          >
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2" htmlFor="event-title">
               <Type size={14} /> {t.modalTitle}
             </label>
             <input
+              id="event-title"
               type="text"
               required
               value={formData.title}
@@ -93,10 +104,11 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onDele
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2" htmlFor="start-date">
                 <Calendar size={14} /> {t.modalStart}
               </label>
               <input
+                id="start-date"
                 type="date"
                 required
                 value={formData.startDate}
@@ -105,10 +117,11 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onDele
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2" htmlFor="end-date">
                 <Calendar size={14} /> {t.modalEnd}
               </label>
               <input
+                id="end-date"
                 type="date"
                 required
                 min={formData.startDate}
@@ -123,7 +136,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onDele
             <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
               <Tag size={14} /> {t.modalCategory}
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Select Category">
               {categories.map(cat => (
                 <button
                   key={cat.id}
@@ -134,8 +147,9 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onDele
                       ? `${cat.bgClass} text-white border-transparent shadow-md`
                       : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
                   }`}
+                  aria-pressed={formData.categoryId === cat.id}
                 >
-                   <div className={`w-2 h-2 rounded-full ${formData.categoryId === cat.id ? 'bg-white' : cat.bgClass}`} />
+                   <div className={`w-2 h-2 rounded-full ${formData.categoryId === cat.id ? 'bg-white' : cat.bgClass}`} aria-hidden="true" />
                    {cat.label}
                 </button>
               ))}
@@ -143,10 +157,11 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, onClose, onSave, onDele
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2" htmlFor="event-notes">
               <AlignLeft size={14} /> {t.modalNotes}
             </label>
             <textarea
+              id="event-notes"
               value={formData.notes}
               onChange={e => setFormData({ ...formData, notes: e.target.value })}
               className="w-full px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 min-h-[80px] text-sm"

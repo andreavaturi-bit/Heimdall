@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Header from './components/Header';
 import CalendarRow from './components/CalendarRow';
 import VerticalView from './components/VerticalView';
@@ -8,6 +8,12 @@ import CategoryModal from './components/CategoryModal';
 import { CalendarEvent, CalendarSettings, CategoryConfig, ViewMode, LayoutMode, Language } from './types';
 import { TRANSLATIONS, DEFAULT_CATEGORIES_LOCALIZED, getLocalizedMonths } from './constants';
 import { detectChains } from './utils/dateHelpers';
+
+const STORAGE_KEYS = {
+  SETTINGS: 'heimdall-settings-v1',
+  CATEGORIES: 'heimdall-categories-v1',
+  EVENTS: 'heimdall-events-v1'
+};
 
 const INITIAL_EVENTS: CalendarEvent[] = [
   {
@@ -30,39 +36,49 @@ const App: React.FC = () => {
   const [year, setYear] = useState(new Date().getFullYear());
   
   const [settings, setSettings] = useState<CalendarSettings>(() => {
-    const saved = localStorage.getItem('life-map-settings');
     const base: CalendarSettings = {
       fadePast: true,
       showBurnoutWarnings: true,
       activeCategoryIds: new Set(),
-      viewMode: 'weekday' as ViewMode,
-      layout: 'horizontal' as LayoutMode,
+      viewMode: 'weekday',
+      layout: 'horizontal',
       isBirdEyeView: false,
-      language: 'en' as Language,
+      language: 'it',
     };
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      if (saved) {
         const parsed = JSON.parse(saved);
         return {
           ...base,
           ...parsed,
           activeCategoryIds: new Set(parsed.activeCategoryIds || [])
         };
-      } catch (e) {
-        return base;
       }
+    } catch (e) {
+      console.error("Failed to load settings", e);
     }
     return base;
   });
 
   const [categories, setCategories] = useState<CategoryConfig[]>(() => {
-    const saved = localStorage.getItem('life-map-categories');
-    return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES_LOCALIZED[settings.language];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error("Failed to load categories", e);
+    }
+    return DEFAULT_CATEGORIES_LOCALIZED[settings.language];
   });
 
   const [events, setEvents] = useState<CalendarEvent[]>(() => {
-    const saved = localStorage.getItem('life-map-events');
-    return saved ? JSON.parse(saved) : INITIAL_EVENTS;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.EVENTS);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error("Failed to load events", e);
+    }
+    return INITIAL_EVENTS;
   });
   
   const [modalState, setModalState] = useState<{
@@ -76,31 +92,45 @@ const App: React.FC = () => {
 
   const t = TRANSLATIONS[settings.language];
 
+  // Save data with error handling
   useEffect(() => {
-    localStorage.setItem('life-map-events', JSON.stringify(events));
+    try {
+      localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
+    } catch (e) {
+      console.error("Storage limit reached for events", e);
+    }
   }, [events]);
 
   useEffect(() => {
-    const settingsToSave = {
-      ...settings,
-      activeCategoryIds: Array.from(settings.activeCategoryIds)
-    };
-    localStorage.setItem('life-map-settings', JSON.stringify(settingsToSave));
+    try {
+      const settingsToSave = {
+        ...settings,
+        activeCategoryIds: Array.from(settings.activeCategoryIds)
+      };
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settingsToSave));
+    } catch (e) {
+      console.error("Failed to save settings", e);
+    }
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem('life-map-categories', JSON.stringify(categories));
-    if (settings.activeCategoryIds.size === 0 && categories.length > 0) {
-      setSettings(prev => ({ ...prev, activeCategoryIds: new Set(categories.map(c => c.id)) }));
+    try {
+      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    } catch (e) {
+      console.error("Failed to save categories", e);
     }
+    
+    setSettings(prev => {
+      if (prev.activeCategoryIds.size === 0 && categories.length > 0) {
+        return { ...prev, activeCategoryIds: new Set(categories.map(c => c.id)) };
+      }
+      return prev;
+    });
   }, [categories]);
 
   const handleAddEvent = useCallback(() => {
     const today = new Date();
-    const initialDate = year === today.getFullYear() 
-      ? today 
-      : new Date(year, 0, 1);
-
+    const initialDate = year === today.getFullYear() ? today : new Date(year, 0, 1);
     setModalState({
       isOpen: true,
       initialData: {
@@ -110,7 +140,7 @@ const App: React.FC = () => {
     });
   }, [year]);
 
-  const handleSelectDay = (date: Date) => {
+  const handleSelectDay = useCallback((date: Date) => {
     setModalState({
       isOpen: true,
       initialData: {
@@ -118,16 +148,16 @@ const App: React.FC = () => {
         endDate: date.toISOString(),
       },
     });
-  };
+  }, []);
 
-  const handleEditEvent = (event: CalendarEvent) => {
+  const handleEditEvent = useCallback((event: CalendarEvent) => {
     setModalState({
       isOpen: true,
       initialData: event,
     });
-  };
+  }, []);
 
-  const handleSaveEvent = (event: CalendarEvent) => {
+  const handleSaveEvent = useCallback((event: CalendarEvent) => {
     setEvents(prev => {
       const index = prev.findIndex(e => e.id === event.id);
       if (index > -1) {
@@ -137,14 +167,14 @@ const App: React.FC = () => {
       }
       return [...prev, event];
     });
-  };
+  }, []);
 
-  const handleDeleteEvent = (id: string) => {
+  const handleDeleteEvent = useCallback((id: string) => {
     setEvents(prev => prev.filter(e => e.id !== id));
-  };
+  }, []);
 
-  const chains = detectChains(events);
-  const months = getLocalizedMonths(settings.language);
+  const chains = useMemo(() => detectChains(events), [events]);
+  const months = useMemo(() => getLocalizedMonths(settings.language), [settings.language]);
 
   return (
     <div className={`min-h-screen bg-slate-50 flex flex-col selection:bg-indigo-100 ${settings.isBirdEyeView ? 'h-screen' : ''}`}>
@@ -237,9 +267,10 @@ const App: React.FC = () => {
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.footerText}</span>
           <button 
             onClick={handleAddEvent}
+            aria-label={t.addJourney}
             className="bg-indigo-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-indigo-200 active:scale-90 transition-transform"
           >
-            <span className="text-2xl">+</span>
+            <span className="text-2xl" aria-hidden="true">+</span>
           </button>
         </footer>
       )}

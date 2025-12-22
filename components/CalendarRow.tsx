@@ -17,7 +17,7 @@ interface CalendarRowProps {
 }
 
 const CalendarRow: React.FC<CalendarRowProps> = ({ year, monthIndex, events, categories, settings, onSelectDay, onEditEvent }) => {
-  const { days, startPadding } = getMonthDays(year, monthIndex);
+  const { days, startPadding } = React.useMemo(() => getMonthDays(year, monthIndex), [year, monthIndex]);
   const months = getLocalizedMonths(settings.language);
   
   const categoryMap = React.useMemo(() => {
@@ -27,7 +27,11 @@ const CalendarRow: React.FC<CalendarRowProps> = ({ year, monthIndex, events, cat
     }, {} as Record<string, CategoryConfig>);
   }, [categories]);
 
-  const monthEvents = events.filter(event => settings.activeCategoryIds.has(event.categoryId));
+  const monthEvents = React.useMemo(() => 
+    events.filter(event => settings.activeCategoryIds.has(event.categoryId)),
+    [events, settings.activeCategoryIds]
+  );
+
   const isBirdEye = settings.isBirdEyeView;
   const maxCols = settings.viewMode === 'weekday' ? 37 : 31;
   const colWidth = isBirdEye ? `${(1 / maxCols) * 100}%` : '3rem';
@@ -96,7 +100,7 @@ const CalendarRow: React.FC<CalendarRowProps> = ({ year, monthIndex, events, cat
                           e.stopPropagation();
                           onEditEvent(event);
                         }}
-                        className={`${isBirdEye ? 'h-1.5 opacity-90' : 'h-5 px-2 px-2 text-[9px]'} rounded-full font-bold text-white shadow-sm flex items-center truncate cursor-pointer hover:brightness-110 transition-all active:scale-95 z-30 ${cat.bgClass} ${settings.fadePast && past ? 'opacity-50' : ''}`}
+                        className={`${isBirdEye ? 'h-1.5 opacity-90' : 'h-5 px-2 text-[9px]'} rounded-full font-bold text-white shadow-sm flex items-center truncate cursor-pointer hover:brightness-110 transition-all active:scale-95 z-30 ${cat.bgClass} ${settings.fadePast && past ? 'opacity-50' : ''}`}
                         style={{ 
                           width: isBirdEye ? `calc(${duration}00% + ${(duration - 1) * 2}px)` : `calc(${duration * 3}rem - 8px)`,
                           minWidth: isBirdEye ? '4px' : '40px' 
@@ -115,4 +119,4 @@ const CalendarRow: React.FC<CalendarRowProps> = ({ year, monthIndex, events, cat
   );
 };
 
-export default CalendarRow;
+export default React.memo(CalendarRow);
