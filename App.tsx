@@ -3,9 +3,10 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Header from './components/Header';
 import CalendarRow from './components/CalendarRow';
 import VerticalView from './components/VerticalView';
+import CyclicView from './components/CyclicView';
 import EventModal from './components/EventModal';
 import CategoryModal from './components/CategoryModal';
-import { CalendarEvent, CalendarSettings, CategoryConfig, ViewMode, LayoutMode, Language } from './types';
+import { CalendarEvent, CalendarSettings, CategoryConfig, ViewMode, LayoutMode, Language, CalendarSystem } from './types';
 import { TRANSLATIONS, DEFAULT_CATEGORIES_LOCALIZED, getLocalizedMonths } from './constants';
 import { detectChains } from './utils/dateHelpers';
 
@@ -44,6 +45,7 @@ const App: React.FC = () => {
       layout: 'horizontal',
       isBirdEyeView: false,
       language: 'it',
+      calendarSystem: 'gregorian'
     };
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
@@ -176,6 +178,51 @@ const App: React.FC = () => {
   const chains = useMemo(() => detectChains(events), [events]);
   const months = useMemo(() => getLocalizedMonths(settings.language), [settings.language]);
 
+  const renderCalendarContent = () => {
+    if (settings.calendarSystem === 'cyclic') {
+      return (
+        <CyclicView 
+          year={year}
+          events={events}
+          categories={categories}
+          settings={settings}
+          onSelectDay={handleSelectDay}
+          onEditEvent={handleEditEvent}
+        />
+      );
+    }
+
+    if (settings.layout === 'horizontal') {
+      return (
+        <div className={`flex flex-col bg-white shadow-xl shadow-slate-200/50 rounded-2xl overflow-hidden border border-slate-200 ${settings.isBirdEyeView ? 'flex-1' : 'm-6'}`}>
+          {months.map((_, i) => (
+            <CalendarRow 
+              key={`${year}-${i}`}
+              year={year}
+              monthIndex={i}
+              events={events}
+              categories={categories}
+              settings={settings}
+              onSelectDay={handleSelectDay}
+              onEditEvent={handleEditEvent}
+            />
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <VerticalView 
+        year={year}
+        events={events}
+        categories={categories}
+        settings={settings}
+        onSelectDay={handleSelectDay}
+        onEditEvent={handleEditEvent}
+      />
+    );
+  };
+
   return (
     <div className={`min-h-screen bg-slate-50 flex flex-col selection:bg-indigo-100 ${settings.isBirdEyeView ? 'h-screen' : ''}`}>
       <Header 
@@ -190,31 +237,7 @@ const App: React.FC = () => {
 
       <main className={`flex-grow no-scrollbar ${settings.isBirdEyeView ? 'overflow-y-auto flex flex-col' : 'overflow-x-auto overflow-y-auto pb-20'}`}>
         <div className={`${settings.isBirdEyeView ? 'min-h-fit flex flex-col p-2' : 'inline-block min-w-full'}`}>
-          {settings.layout === 'horizontal' ? (
-            <div className={`flex flex-col bg-white shadow-xl shadow-slate-200/50 rounded-2xl overflow-hidden border border-slate-200 ${settings.isBirdEyeView ? 'flex-1' : 'm-6'}`}>
-              {months.map((_, i) => (
-                <CalendarRow 
-                  key={`${year}-${i}`}
-                  year={year}
-                  monthIndex={i}
-                  events={events}
-                  categories={categories}
-                  settings={settings}
-                  onSelectDay={handleSelectDay}
-                  onEditEvent={handleEditEvent}
-                />
-              ))}
-            </div>
-          ) : (
-            <VerticalView 
-              year={year}
-              events={events}
-              categories={categories}
-              settings={settings}
-              onSelectDay={handleSelectDay}
-              onEditEvent={handleEditEvent}
-            />
-          )}
+          {renderCalendarContent()}
 
           {!settings.isBirdEyeView && (
             <div className="m-6 flex flex-col md:flex-row gap-6">

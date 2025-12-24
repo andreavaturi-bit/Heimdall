@@ -2,17 +2,24 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 interface State {
   hasError: boolean;
 }
 
+/**
+ * ErrorBoundary catches errors in the component tree.
+ */
+// Fix: Using an explicit constructor and extending Component directly helps TypeScript correctly infer 'this.props' and 'this.state'.
 class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false
-  };
+  constructor(props: Props) {
+    super(props);
+    this.state = {
+      hasError: false
+    };
+  }
 
   public static getDerivedStateFromError(_: Error): State {
     return { hasError: true };
@@ -23,6 +30,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public render() {
+    // Access 'hasError' from 'this.state' which is correctly typed
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
@@ -40,7 +48,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fixed: children must be accessed from this.props in class components
+    // Access 'children' from 'this.props' which is inherited from the Component base class
     return this.props.children;
   }
 }

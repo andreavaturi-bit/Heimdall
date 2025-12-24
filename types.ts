@@ -20,6 +20,7 @@ export interface CalendarEvent {
 export type ViewMode = 'weekday' | 'numeric';
 export type LayoutMode = 'horizontal' | 'vertical';
 export type Language = 'en' | 'it';
+export type CalendarSystem = 'gregorian' | 'cyclic';
 
 export interface CalendarSettings {
   fadePast: boolean;
@@ -29,4 +30,5 @@ export interface CalendarSettings {
   layout: LayoutMode;
   isBirdEyeView: boolean;
   language: Language;
+  calendarSystem: CalendarSystem;
 }
