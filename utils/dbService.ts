@@ -1,0 +1,105 @@
+
+import { neon } from '@netlify/neon';
+import { CalendarEvent } from '../types';
+
+/**
+ * Servizio per la gestione della persistenza su Neon PostgreSQL.
+ * Il driver @netlify/neon rileva automaticamente la variabile NETLIFY_DATABASE_URL iniettata da Netlify.
+ */
+class DbService {
+  private sql: any;
+  private isInitialized: boolean = false;
+
+  constructor() {
+    try {
+      // Inizializza senza parametri come suggerito dalle istruzioni di Netlify nello screenshot.
+      // Questo userà automaticamente la variabile d'ambiente NETLIFY_DATABASE_URL.
+      this.sql = neon();
+    } catch (error) {
+      console.warn("Neon DB: Impossibile inizializzare il client (probabilmente variabile d'ambiente mancante). Fallback in modalità locale.");
+    }
+  }
+
+  /**
+   * Crea la tabella se non esiste
+   */
+  async init() {
+    if (!this.sql || this.isInitialized) return;
+    try {
+      await this.sql`
+        CREATE TABLE IF NOT EXISTS events (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          category_id TEXT NOT NULL,
+          notes TEXT
+        )
+      `;
+      this.isInitialized = true;
+      console.log("Neon DB: Tabella inizializzata con successo.");
+    } catch (error) {
+      console.error("Neon DB: Errore inizializzazione:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Recupera tutti gli eventi
+   */
+  async fetchEvents(): Promise<CalendarEvent[]> {
+    if (!this.sql) return [];
+    try {
+      await this.init();
+      const rows = await this.sql`SELECT * FROM events`;
+      return rows.map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        startDate: r.start_date,
+        endDate: r.end_date,
+        categoryId: r.category_id,
+        notes: r.notes || ''
+      }));
+    } catch (error) {
+      console.error("Neon DB: Errore fetchEvents:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Salva o aggiorna un evento
+   */
+  async saveEvent(event: CalendarEvent) {
+    if (!this.sql) return;
+    try {
+      await this.init();
+      await this.sql`
+        INSERT INTO events (id, title, start_date, end_date, category_id, notes)
+        VALUES (${event.id}, ${event.title}, ${event.startDate}, ${event.endDate}, ${event.categoryId}, ${event.notes || ''})
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          start_date = EXCLUDED.start_date,
+          end_date = EXCLUDED.end_date,
+          category_id = EXCLUDED.category_id,
+          notes = EXCLUDED.notes
+      `;
+    } catch (error) {
+      console.error("Neon DB: Errore saveEvent:", error);
+    }
+  }
+
+  /**
+   * Elimina un evento
+   */
+  async deleteEvent(id: string) {
+    if (!this.sql) return;
+    try {
+      await this.init();
+      await this.sql`DELETE FROM events WHERE id = ${id}`;
+    } catch (error) {
+      console.error("Neon DB: Errore deleteEvent:", error);
+    }
+  }
+}
+
+export const dbService = new DbService();

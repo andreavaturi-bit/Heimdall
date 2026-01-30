@@ -10,6 +10,8 @@ import { CalendarEvent, CalendarSettings, CategoryConfig, Language, CalendarSyst
 import { TRANSLATIONS, DEFAULT_CATEGORIES_LOCALIZED, getLocalizedMonths } from './constants';
 import { detectChains } from './utils/dateHelpers';
 import { googleCalendarService } from './utils/googleCalendarService';
+import { dbService } from './utils/dbService';
+import { Database, RefreshCw, WifiOff } from 'lucide-react';
 
 const STORAGE_KEYS = {
   SETTINGS: 'heimdall-settings-v1',
@@ -37,6 +39,8 @@ const INITIAL_EVENTS: CalendarEvent[] = [
 const App: React.FC = () => {
   const [year, setYear] = useState(new Date().getFullYear());
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDbSyncing, setIsDbSyncing] = useState(false);
+  const [dbConnected, setDbConnected] = useState(false);
   
   const [settings, setSettings] = useState<CalendarSettings>(() => {
     const base: CalendarSettings = {
@@ -84,6 +88,29 @@ const App: React.FC = () => {
     }
     return INITIAL_EVENTS;
   });
+
+  // Caricamento iniziale da Neon DB
+  useEffect(() => {
+    const loadFromDb = async () => {
+      setIsDbSyncing(true);
+      try {
+        const dbEvents = await dbService.fetchEvents();
+        if (dbEvents.length > 0) {
+          setEvents(dbEvents);
+          setDbConnected(true);
+        } else {
+          // Se il DB è vuoto ma connesso, consideriamolo comunque connesso
+          setDbConnected(true);
+        }
+      } catch (e) {
+        console.error("Errore caricamento DB:", e);
+        setDbConnected(false);
+      } finally {
+        setIsDbSyncing(false);
+      }
+    };
+    loadFromDb();
+  }, []);
   
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -96,6 +123,7 @@ const App: React.FC = () => {
 
   const t = TRANSLATIONS[settings.language];
 
+  // Persistenza locale e DB
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
   }, [events]);
@@ -144,7 +172,7 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const handleSaveEvent = useCallback((event: CalendarEvent) => {
+  const handleSaveEvent = useCallback(async (event: CalendarEvent) => {
     setEvents(prev => {
       const index = prev.findIndex(e => e.id === event.id);
       if (index > -1) {
@@ -154,10 +182,34 @@ const App: React.FC = () => {
       }
       return [...prev, event];
     });
+
+    // Sincronizzazione Neon DB
+    setIsDbSyncing(true);
+    try {
+      await dbService.saveEvent(event);
+      setDbConnected(true);
+    } catch (e) {
+      console.error("Errore salvataggio DB:", e);
+      setDbConnected(false);
+    } finally {
+      setIsDbSyncing(false);
+    }
   }, []);
 
-  const handleDeleteEvent = useCallback((id: string) => {
+  const handleDeleteEvent = useCallback(async (id: string) => {
     setEvents(prev => prev.filter(e => e.id !== id));
+    
+    // Sincronizzazione Neon DB
+    setIsDbSyncing(true);
+    try {
+      await dbService.deleteEvent(id);
+      setDbConnected(true);
+    } catch (e) {
+      console.error("Errore cancellazione DB:", e);
+      setDbConnected(false);
+    } finally {
+      setIsDbSyncing(false);
+    }
   }, []);
 
   const handleSyncGoogle = useCallback(async () => {
@@ -165,12 +217,16 @@ const App: React.FC = () => {
     try {
       const googleEvents = await googleCalendarService.fetchEvents(year);
       
-      setEvents(prev => {
-        // Evita duplicati basandoti sull'ID generato per Google
-        const existingIds = new Set(prev.map(e => e.id));
-        const newEvents = googleEvents.filter(ge => !existingIds.has(ge.id));
-        return [...prev, ...newEvents];
-      });
+      const existingIds = new Set(events.map(e => e.id));
+      const newEvents = googleEvents.filter(ge => !existingIds.has(ge.id));
+      
+      if (newEvents.length > 0) {
+        setEvents(prev => [...prev, ...newEvents]);
+        // Salva gli eventi importati anche nel DB
+        for (const ne of newEvents) {
+          await dbService.saveEvent(ne);
+        }
+      }
 
       alert(t.syncSuccess);
     } catch (e) {
@@ -179,7 +235,7 @@ const App: React.FC = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, [year, t]);
+  }, [year, events, t]);
 
   const chains = useMemo(() => detectChains(events), [events]);
   const months = useMemo(() => getLocalizedMonths(settings.language), [settings.language]);
@@ -297,11 +353,28 @@ const App: React.FC = () => {
         language={settings.language}
       />
 
-      <footer className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-100 py-3 px-6 flex justify-between items-center z-40 lg:hidden">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.footerText}</span>
+      <footer className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 py-3 px-6 flex justify-between items-center z-40">
+        <div className="flex items-center gap-4">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:block">
+            {t.footerText}
+          </span>
+          <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-slate-50 border border-slate-100">
+            {isDbSyncing ? (
+              <RefreshCw className="w-3 h-3 text-indigo-500 animate-spin" />
+            ) : dbConnected ? (
+              <Database className="w-3 h-3 text-emerald-500" />
+            ) : (
+              <WifiOff className="w-3 h-3 text-slate-300" />
+            )}
+            <span className="text-[9px] font-black uppercase text-slate-500">
+              {isDbSyncing ? t.dbSyncing : dbConnected ? t.dbStatus : t.dbOffline}
+            </span>
+          </div>
+        </div>
+        
         <button 
           onClick={handleAddEvent}
-          className="bg-indigo-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform"
+          className="bg-indigo-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform lg:hidden"
         >
           <span className="text-2xl">+</span>
         </button>
