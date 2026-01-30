@@ -1,23 +1,25 @@
-import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
-    return {
-      server: {
-        port: 3000,
-        host: '0.0.0.0',
-      },
-      plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
-      resolve: {
-        alias: {
-          '@': path.resolve(__dirname, '.'),
-        }
-      }
-    };
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    rollupOptions: {
+      // Diciamo a Vite di non provare a risolvere questi pacchetti durante la build
+      // perché verranno risolti dal browser tramite l'importmap nell'index.html
+      external: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'lucide-react',
+        'date-fns',
+        '@netlify/neon'
+      ],
+    },
+  },
+  // Inseriamo la variabile d'ambiente affinché sia disponibile nel frontend
+  define: {
+    'process.env.NETLIFY_DATABASE_URL': JSON.stringify(process.env.NETLIFY_DATABASE_URL),
+  }
 });

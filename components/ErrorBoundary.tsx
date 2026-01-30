@@ -1,5 +1,5 @@
 
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children?: ReactNode;
@@ -12,8 +12,8 @@ interface State {
 /**
  * ErrorBoundary catches errors in the component tree.
  */
-// Fix: Explicitly extending React.Component ensures 'props' and 'state' are correctly inherited and recognized by the TypeScript compiler.
-class ErrorBoundary extends React.Component<Props, State> {
+// Fix: Extending Component directly from named imports often resolves property inheritance detection issues in TypeScript class components.
+class ErrorBoundary extends Component<Props, State> {
   // Fix: Initializing state as a class property helps resolve "Property 'state' does not exist" errors in certain TS configurations.
   public state: State = {
     hasError: false
@@ -28,7 +28,7 @@ class ErrorBoundary extends React.Component<Props, State> {
   }
 
   public render() {
-    // Fix: Accessing state via this.state is now correctly typed.
+    // Fix: Accessing state via this.state is now correctly typed as State.
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
@@ -46,7 +46,7 @@ class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Fix: Accessing children via this.props is now correctly recognized as inherited from React.Component.
+    // Fix: Using this.props.children now correctly resolves as it is inherited from Component<Props, State>.
     return this.props.children;
   }
 }

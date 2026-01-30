@@ -4,7 +4,7 @@ import { CalendarEvent } from '../types';
 
 /**
  * Servizio per la gestione della persistenza su Neon PostgreSQL.
- * Il driver @netlify/neon rileva automaticamente la variabile NETLIFY_DATABASE_URL iniettata da Netlify.
+ * Utilizza la variabile d'ambiente NETLIFY_DATABASE_URL iniettata durante la build di Vite.
  */
 class DbService {
   private sql: any;
@@ -12,11 +12,19 @@ class DbService {
 
   constructor() {
     try {
-      // Inizializza senza parametri come suggerito dalle istruzioni di Netlify nello screenshot.
-      // Questo userà automaticamente la variabile d'ambiente NETLIFY_DATABASE_URL.
-      this.sql = neon();
+      // process.env.NETLIFY_DATABASE_URL viene sostituito dal valore reale da Vite durante la build
+      const url = (process.env as any).NETLIFY_DATABASE_URL;
+      
+      if (url) {
+        this.sql = neon(url);
+        console.log("Neon DB: Client inizializzato con URL.");
+      } else {
+        // Fallback per ambienti che supportano l'autodiscovery (es. Netlify Functions)
+        this.sql = neon();
+        console.warn("Neon DB: URL non trovato in build-time, tentativo autodiscovery.");
+      }
     } catch (error) {
-      console.warn("Neon DB: Impossibile inizializzare il client (probabilmente variabile d'ambiente mancante). Fallback in modalità locale.");
+      console.warn("Neon DB: Impossibile inizializzare il client. Fallback in modalità locale.");
     }
   }
 
@@ -37,7 +45,7 @@ class DbService {
         )
       `;
       this.isInitialized = true;
-      console.log("Neon DB: Tabella inizializzata con successo.");
+      console.log("Neon DB: Tabella verificata/creata con successo.");
     } catch (error) {
       console.error("Neon DB: Errore inizializzazione:", error);
       throw error;
@@ -51,7 +59,7 @@ class DbService {
     if (!this.sql) return [];
     try {
       await this.init();
-      const rows = await this.sql`SELECT * FROM events`;
+      const rows = await this.sql`SELECT * FROM events ORDER BY start_date ASC`;
       return rows.map((r: any) => ({
         id: r.id,
         title: r.title,
