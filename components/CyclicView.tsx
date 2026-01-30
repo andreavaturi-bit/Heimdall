@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { format, isToday, isPast, isSameDay, parseISO, isWeekend } from 'date-fns';
-import { getCyclicYearData } from '../utils/dateHelpers';
+import { getCyclicYearData, isEventInDay } from '../utils/dateHelpers';
 import { CalendarEvent, CalendarSettings, CategoryConfig } from '../types';
 import { TRANSLATIONS, getLocalizedMonths } from '../constants';
 import { Flag, CheckCircle2 } from 'lucide-react';
@@ -139,8 +139,9 @@ const CyclicView: React.FC<CyclicViewProps> = ({ year, events, categories, setti
                         )}
 
                         <div className="flex flex-col gap-0.5 overflow-y-auto no-scrollbar flex-grow">
-                          {week.days.map(day => {
-                            const dayEvents = filteredEvents.filter(e => isSameDay(parseISO(e.startDate), day));
+                          {week.days.map((day, dIdx) => {
+                            // Fix: Use isEventInDay to check if the current day is part of an event's duration
+                            const dayEvents = filteredEvents.filter(e => isEventInDay(day, e));
                             const today = isToday(day);
                             const past = isPast(day) && !today;
                             const isWknd = isWeekend(day);
@@ -172,6 +173,14 @@ const CyclicView: React.FC<CyclicViewProps> = ({ year, events, categories, setti
                                 {dayEvents.map(event => {
                                   const cat = categoryMap[event.categoryId];
                                   if (!cat) return null;
+                                  
+                                  const isFirstDayOfEvent = isSameDay(parseISO(event.startDate), day);
+                                  const isFirstDayOfWeek = dIdx === 0;
+                                  
+                                  // Intelligence: Only show the title if it's the start of the event 
+                                  // or the first day of the week to show continuation.
+                                  const showTitle = isFirstDayOfEvent || isFirstDayOfWeek;
+
                                   return (
                                     <div
                                       key={event.id}
@@ -181,10 +190,13 @@ const CyclicView: React.FC<CyclicViewProps> = ({ year, events, categories, setti
                                       }}
                                       className={`rounded-sm px-1 py-0.5 ${isBirdEye ? 'h-1.5' : 'h-auto'} ${cat.bgClass} ${settings.fadePast && past ? 'opacity-40 grayscale' : ''} transition-all hover:brightness-110 active:scale-95`}
                                     >
-                                      {!isBirdEye && (
-                                        <span className="text-[8px] font-bold text-white truncate block leading-none">
-                                          {event.title}
-                                        </span>
+                                      {!isBirdEye && showTitle && (
+                                        <div className="flex items-center gap-1 overflow-hidden">
+                                          {!isFirstDayOfEvent && <span className="text-[7px] opacity-70">...</span>}
+                                          <span className="text-[8px] font-bold text-white truncate block leading-none">
+                                            {event.title}
+                                          </span>
+                                        </div>
                                       )}
                                     </div>
                                   )

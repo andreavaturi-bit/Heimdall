@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ChevronLeft, ChevronRight, Hourglass, Tags, Maximize2, Minimize2, CalendarRange, LayoutList, Columns, Rows, Globe, Eye, RefreshCcw, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Hourglass, Tags, Maximize2, Minimize2, CalendarRange, LayoutList, Columns, Rows, Globe, Eye, RefreshCcw, Plus, Calendar as CalendarIcon, Loader2 } from 'lucide-react';
 import { CalendarSettings, CategoryConfig, Language, CalendarSystem } from '../types';
 import { TRANSLATIONS } from '../constants';
 
@@ -12,10 +12,12 @@ interface HeaderProps {
   categories: CategoryConfig[];
   onAddEvent: () => void;
   onManageCategories: () => void;
+  onSyncGoogle: () => void;
+  isSyncing: boolean;
 }
 
 const Header: React.FC<HeaderProps> = ({ 
-  year, setYear, settings, setSettings, categories, onAddEvent, onManageCategories 
+  year, setYear, settings, setSettings, categories, onAddEvent, onManageCategories, onSyncGoogle, isSyncing
 }) => {
   const t = TRANSLATIONS[settings.language];
 
@@ -99,6 +101,26 @@ const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Google Sync Button */}
+          <button
+            onClick={onSyncGoogle}
+            disabled={isSyncing}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all border ${
+              isSyncing 
+                ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed' 
+                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            {isSyncing ? (
+              <Loader2 size={16} className="animate-spin text-indigo-500" />
+            ) : (
+              <CalendarIcon size={16} className="text-blue-500" />
+            )}
+            <span className="hidden sm:inline">{isSyncing ? t.syncing : t.syncGoogle}</span>
+          </button>
+
+          <div className="w-px h-8 bg-slate-200 mx-1 hidden sm:block" />
+
           {/* Mobile-only Add Button (Icon) */}
           <button
             onClick={onAddEvent}
@@ -142,7 +164,7 @@ const Header: React.FC<HeaderProps> = ({
         ))}
       </div>
 
-      {/* Bottom Row: Utility Toggles (Scrollable on Mobile) */}
+      {/* Bottom Row: Utility Toggles */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-2 px-4 md:px-6 bg-slate-50/50 border-t border-slate-100">
         <div className="flex items-center gap-2 pr-4">
           <button

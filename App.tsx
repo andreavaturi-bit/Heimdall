@@ -6,9 +6,10 @@ import VerticalView from './components/VerticalView';
 import CyclicView from './components/CyclicView';
 import EventModal from './components/EventModal';
 import CategoryModal from './components/CategoryModal';
-import { CalendarEvent, CalendarSettings, CategoryConfig, ViewMode, LayoutMode, Language, CalendarSystem } from './types';
+import { CalendarEvent, CalendarSettings, CategoryConfig, Language, CalendarSystem } from './types';
 import { TRANSLATIONS, DEFAULT_CATEGORIES_LOCALIZED, getLocalizedMonths } from './constants';
 import { detectChains } from './utils/dateHelpers';
+import { googleCalendarService } from './utils/googleCalendarService';
 
 const STORAGE_KEYS = {
   SETTINGS: 'heimdall-settings-v1',
@@ -19,15 +20,15 @@ const STORAGE_KEYS = {
 const INITIAL_EVENTS: CalendarEvent[] = [
   {
     id: '1',
-    title: 'Q1 Vision Sprint',
+    title: '🚀 Lancio Progetto X',
     startDate: new Date(2025, 0, 15).toISOString(),
-    endDate: new Date(2025, 0, 25).toISOString(),
+    endDate: new Date(2025, 1, 5).toISOString(),
     categoryId: 'work',
   },
   {
     id: '2',
-    title: 'Alpine Recovery',
-    startDate: new Date(2025, 1, 10).toISOString(),
+    title: '🏔️ Weekend sulle Alpi',
+    startDate: new Date(2025, 1, 14).toISOString(),
     endDate: new Date(2025, 1, 17).toISOString(),
     categoryId: 'travel',
   }
@@ -35,6 +36,7 @@ const INITIAL_EVENTS: CalendarEvent[] = [
 
 const App: React.FC = () => {
   const [year, setYear] = useState(new Date().getFullYear());
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const [settings, setSettings] = useState<CalendarSettings>(() => {
     const base: CalendarSettings = {
@@ -94,41 +96,24 @@ const App: React.FC = () => {
 
   const t = TRANSLATIONS[settings.language];
 
-  // Save data with error handling
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
-    } catch (e) {
-      console.error("Storage limit reached for events", e);
-    }
+    localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
   }, [events]);
 
   useEffect(() => {
-    try {
-      const settingsToSave = {
-        ...settings,
-        activeCategoryIds: Array.from(settings.activeCategoryIds)
-      };
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settingsToSave));
-    } catch (e) {
-      console.error("Failed to save settings", e);
-    }
+    const settingsToSave = {
+      ...settings,
+      activeCategoryIds: Array.from(settings.activeCategoryIds)
+    };
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settingsToSave));
   }, [settings]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
-    } catch (e) {
-      console.error("Failed to save categories", e);
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    if (settings.activeCategoryIds.size === 0 && categories.length > 0) {
+      setSettings(prev => ({ ...prev, activeCategoryIds: new Set(categories.map(c => c.id)) }));
     }
-    
-    setSettings(prev => {
-      if (prev.activeCategoryIds.size === 0 && categories.length > 0) {
-        return { ...prev, activeCategoryIds: new Set(categories.map(c => c.id)) };
-      }
-      return prev;
-    });
-  }, [categories]);
+  }, [categories, settings.activeCategoryIds]);
 
   const handleAddEvent = useCallback(() => {
     const today = new Date();
@@ -175,6 +160,27 @@ const App: React.FC = () => {
     setEvents(prev => prev.filter(e => e.id !== id));
   }, []);
 
+  const handleSyncGoogle = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const googleEvents = await googleCalendarService.fetchEvents(year);
+      
+      setEvents(prev => {
+        // Evita duplicati basandoti sull'ID generato per Google
+        const existingIds = new Set(prev.map(e => e.id));
+        const newEvents = googleEvents.filter(ge => !existingIds.has(ge.id));
+        return [...prev, ...newEvents];
+      });
+
+      alert(t.syncSuccess);
+    } catch (e) {
+      console.error("Google Sync failed", e);
+      alert(t.syncError);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [year, t]);
+
   const chains = useMemo(() => detectChains(events), [events]);
   const months = useMemo(() => getLocalizedMonths(settings.language), [settings.language]);
 
@@ -194,7 +200,11 @@ const App: React.FC = () => {
 
     if (settings.layout === 'horizontal') {
       return (
-        <div className={`flex flex-col bg-white shadow-xl shadow-slate-200/50 rounded-2xl overflow-hidden border border-slate-200 ${settings.isBirdEyeView ? 'flex-1' : 'm-6'}`}>
+        <div className={`
+          flex flex-col bg-white shadow-2xl shadow-slate-200/50 border border-slate-200 
+          ${settings.isBirdEyeView ? 'mx-4 my-2 rounded-xl' : 'm-6 rounded-2xl'}
+          min-w-[calc(100%-3rem)] inline-block
+        `}>
           {months.map((_, i) => (
             <CalendarRow 
               key={`${year}-${i}`}
@@ -224,7 +234,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen bg-slate-50 flex flex-col selection:bg-indigo-100 ${settings.isBirdEyeView ? 'h-screen' : ''}`}>
+    <div className="min-h-screen bg-slate-50 flex flex-col selection:bg-indigo-100">
       <Header 
         year={year} 
         setYear={setYear} 
@@ -233,14 +243,16 @@ const App: React.FC = () => {
         categories={categories}
         onAddEvent={handleAddEvent}
         onManageCategories={() => setIsCategoryModalOpen(true)}
+        onSyncGoogle={handleSyncGoogle}
+        isSyncing={isSyncing}
       />
 
-      <main className={`flex-grow no-scrollbar ${settings.isBirdEyeView ? 'overflow-y-auto flex flex-col' : 'overflow-x-auto overflow-y-auto pb-20'}`}>
-        <div className={`${settings.isBirdEyeView ? 'min-h-fit flex flex-col p-2' : 'inline-block min-w-full'}`}>
+      <main className="flex-grow flex flex-col overflow-auto no-scrollbar pb-24">
+        <div className="flex flex-col items-start min-w-full">
           {renderCalendarContent()}
 
           {!settings.isBirdEyeView && (
-            <div className="m-6 flex flex-col md:flex-row gap-6">
+            <div className="m-6 flex flex-col md:flex-row gap-6 self-stretch">
               <div className="bg-white p-6 rounded-2xl border border-slate-200 flex-grow shadow-sm">
                 <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                   <span className="w-2 h-4 bg-indigo-500 rounded-full" />
@@ -285,18 +297,15 @@ const App: React.FC = () => {
         language={settings.language}
       />
 
-      {!settings.isBirdEyeView && (
-        <footer className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-100 py-3 px-6 flex justify-between items-center z-40 lg:hidden">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.footerText}</span>
-          <button 
-            onClick={handleAddEvent}
-            aria-label={t.addJourney}
-            className="bg-indigo-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg shadow-indigo-200 active:scale-90 transition-transform"
-          >
-            <span className="text-2xl" aria-hidden="true">+</span>
-          </button>
-        </footer>
-      )}
+      <footer className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-100 py-3 px-6 flex justify-between items-center z-40 lg:hidden">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.footerText}</span>
+        <button 
+          onClick={handleAddEvent}
+          className="bg-indigo-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform"
+        >
+          <span className="text-2xl">+</span>
+        </button>
+      </footer>
     </div>
   );
 };
